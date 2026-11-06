@@ -538,4 +538,37 @@ Also, many thanks to:
 ## Arknights: Endfield VFS / Bundles
 
 This branch adds read-only Bundle/InitBundle VFS and aggregate AB support.
-See [usage and supported formats](docs/endfield.md) for selective loading with `UnityPy.EndfieldVFS` and `UnityPy.load_endfield`.
+Use `EndfieldVFS` to load selected AB names, or hgmmap to find resources by path or 64-bit integer hash:
+
+```python
+import UnityPy
+
+vfs = UnityPy.EndfieldVFS("/path/to/game/VFS")
+path = "assets/beyond/arts/ui/sprites/map/btn_map_delete_icon.png"
+info = vfs.find_asset(path)  # EndfieldAssetInfo, or None; also accepts an integer path hash
+if info is not None:
+    print(info.path, info.path_hash, info.bundle_index, info.bundle_name, info.asset_size)
+    env = vfs.load_asset(path, with_dependencies=True)
+    image = env.container[info.path].deref_parse_as_object().image
+    image.save("texture.png")
+    # Reuse parsed bundles and register more root assets in the same environment.
+    vfs.load_asset(info.path_hash, environment=env)
+```
+
+The hgmmap catalog is loaded on the first resource query and cached on the VFS instance.
+It is read and decrypted from the sibling BundleManifest group (`1CDDBF1F`), with Patch preferred over Base.
+For a standalone hgmmap, pass `manifest_path="/path/to/manifest.hgmmap"` to `EndfieldVFS`.
+Create a new VFS instance after updating game files.
+
+`load_asset` returns an ordinary Environment and loads the resource's whole AB. Transitive dependencies
+are included by default, with cycles and duplicates removed. They are available to PPtr and resource
+stream resolution, while `env.objects`, `env.assets`, and `env.container` expose explicitly loaded roots.
+Loading a dependency explicitly later promotes it to a root. Repeating a load in the same environment
+reuses the parsed files. Missing assets, dependency bundles, or CHKs raise `FileNotFoundError`.
+Use `with_dependencies=False` to load only the selected AB. A VFS restricted to one group or CHK can only
+load bundles in that selection; hgmmap queries can still return metadata for other bundles.
+
+Existing `vfs.read(name)`, `vfs.load(names)`, and `UnityPy.load_endfield(path, bundle_names=...)` continue
+to accept logical AB file names and do not require hgmmap. `env.container` remains a view of loaded
+objects, rather than the full manifest index. Only Bundle, InitBundle and their manifest are handled;
+Table and other VFS resource groups are excluded. VFS and aggregate bundle writing is not supported.
