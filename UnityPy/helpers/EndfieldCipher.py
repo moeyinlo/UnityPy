@@ -1,6 +1,4 @@
-# SPDX-License-Identifier: MIT
 # Custom AES substitution and sampled stream transform used by Endfield bundles.
-# Ported from Perlica's AggregateCipher; see licenses/endfield-bundle-parser-MIT.txt.
 from functools import lru_cache
 
 KEY = bytes.fromhex(

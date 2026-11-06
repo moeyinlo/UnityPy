@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: MIT
-# Format and codec ported from Perlica; see licenses/endfield-bundle-parser-MIT.txt.
 """Endfield aggregate bundle decoder (48-byte header, encFlags=8)."""
 
 import struct
