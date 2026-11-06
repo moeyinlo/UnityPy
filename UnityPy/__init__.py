@@ -9,3 +9,6 @@ load = Environment
 
 # backward compatibility
 AssetsManager = Environment
+
+from .endfield import EndfieldVFS as EndfieldVFS  # noqa: E402
+from .endfield import load_endfield as load_endfield  # noqa: E402

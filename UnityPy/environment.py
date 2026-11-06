@@ -54,6 +54,12 @@ class Environment:
         if args:
             for arg in args:
                 if isinstance(arg, str):
+                    from .endfield import EndfieldVFS
+
+                    if isinstance(self.fs, LocalFileSystem) and EndfieldVFS.recognizes(arg):
+                        self.path = arg if self.fs.isdir(arg) else ntpath.dirname(arg)
+                        EndfieldVFS(arg).load(environment=self)
+                        continue
                     if self.fs.isfile(arg):
                         if ntpath.splitext(arg)[-1] in [".apk", ".zip"]:
                             self.load_zip_file(arg)

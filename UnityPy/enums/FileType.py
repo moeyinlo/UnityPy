@@ -7,3 +7,4 @@ class FileType(IntEnum):
     WebFile = 2
     ResourceFile = 9
     ZIP = 10
+    EndfieldBundleFile = 11

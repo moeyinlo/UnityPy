@@ -110,7 +110,7 @@ class BDistWheel(bdist_wheel):  # type: ignore
 setup(
     name="UnityPy",
     packages=find_packages(),
-    package_data={"UnityPy": ["resources/lzma.tpk"]},
+    package_data={"UnityPy": ["resources/lzma.tpk", "licenses/*.txt"]},
     ext_modules=[
         Extension(
             "UnityPy.UnityPyBoost",

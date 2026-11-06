@@ -534,3 +534,8 @@ Also, many thanks to:
 -   [Razmoth](https://github.com/Razmoth) for figuring out and sharing Unity CN's AssetBundle decryption ([src](https://github.com/Razmoth/PGRStudio)).
 -   [nesrak1](https://github.com/nesrak1) for figuring out the [Switch texture swizzling](https://github.com/nesrak1/UABEA/blob/master/TexturePlugin/Texture2DSwitchDeswizzler.cs)
 -   xiop_13690 (discord) for figuring out unsolved issues of the ManagedReferencesRegistry
+
+## Arknights: Endfield VFS / Bundles
+
+This branch adds read-only Bundle/InitBundle VFS and aggregate AB support.
+See [usage and supported formats](docs/endfield.md) for selective loading with `UnityPy.EndfieldVFS` and `UnityPy.load_endfield`.

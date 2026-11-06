@@ -9,6 +9,7 @@ from .. import files
 from ..enums import FileType
 from ..streams import EndianBinaryReader
 from .CompressionHelper import BROTLI_MAGIC, GZIP_MAGIC
+from .EndfieldBundle import is_endfield_bundle
 
 FileSourceType = Union[str, bytes, bytearray, io.IOBase, EndianBinaryReader, BinaryIO]
 
@@ -50,6 +51,13 @@ def check_file_type(
         reader = input_
     else:
         reader = EndianBinaryReader(input_)
+
+    # Probe the encoded signature before interpreting it as a text/header field.
+    start = reader.Position
+    prefix = reader.read_bytes(min(8, reader.Length))
+    reader.Position = start
+    if is_endfield_bundle(prefix):
+        return FileType.EndfieldBundleFile, reader
 
     if reader.Length < 20:
         return FileType.ResourceFile, reader
@@ -147,6 +155,10 @@ def parse_file(
             f = files.SerializedFile(reader, parent, name=name, is_dependency=is_dependency)
         elif typ == FileType.BundleFile:
             f = files.BundleFile(reader, parent, name=name, is_dependency=is_dependency)
+        elif typ == FileType.EndfieldBundleFile:
+            from ..files.EndfieldBundleFile import EndfieldBundleFile
+
+            f = EndfieldBundleFile(reader, parent, name=name, is_dependency=is_dependency)
         elif typ == FileType.WebFile:
             f = files.WebFile(reader, parent, name=name, is_dependency=is_dependency)
     except Exception as e:

@@ -62,9 +62,10 @@ UnityPy = "UnityPy.cli:main"
 
 [project.optional-dependencies]
 # optional dependencies must be lowercase/normalized
+endfield = ["pycryptodome>=3.18"]
 ttgen = ["typetreegeneratorapi>=0.0.10"]
 full = ["unitypy[ttgen]"]
-tests = ["pytest", "pillow", "psutil", "unitypy[full]"]
+tests = ["pycryptodome>=3.18", "pytest", "pillow", "psutil", "unitypy[full]"]
 dev = ["ruff", "unitypy[tests]"]
 
 [project.urls]
