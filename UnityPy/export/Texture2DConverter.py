@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import struct
 from functools import lru_cache
-from io import BytesIO
 from threading import get_ident
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -239,6 +238,9 @@ def get_image_from_texture2d(
     flip: bool = True,
 ) -> Image.Image:
     """Converts the given Texture2D object to PIL Image."""
+    # Runtime-generated font atlases may serialize a zero-sized placeholder.
+    if not texture_2d.m_Width or not texture_2d.m_Height:
+        return Image.new("RGBA", (0, 0))
     return parse_image_data(
         texture_2d.get_image_data(),
         texture_2d.m_Width,
@@ -443,40 +445,49 @@ def eac(image_data: bytes, width: int, height: int, fmt: str) -> Image.Image:
     return Image.frombytes("RGBA", (width, height), image_data, "raw", "BGRA")
 
 
-def half(
-    image_data: bytes,
-    width: int,
-    height: int,
-    mode: str,
-    codec: str,
-    args,
-    swap: Optional[tuple] = None,
-) -> Image.Image:
-    # convert half-float to int8
-    stream = BytesIO(image_data)
-    image_data = bytes(int(struct.unpack("e", stream.read(2))[0] * 256) for _ in range(width * height * len(codec)))
-    return pillow(image_data, width, height, mode, codec, args, swap)
+def floating_point(image_data: bytes, width: int, height: int, channels: int, component_format: str) -> Image.Image:
+    """Decode interleaved little-endian floats to an 8-bit preview.
+
+    Clamp HDR values to [0, 1] without rescaling the texture; NaN maps to zero.
+    The source data, including HDR values and mipmaps, is left unchanged.
+    """
+    component = struct.Struct("<" + component_format)
+    count = width * height * channels
+    size = count * component.size
+    if len(image_data) < size:
+        raise ValueError(f"Invalid floating-point texture data size: {len(image_data)} < {size}")
+    pixels = bytearray(width * height * (4 if channels == 4 else 3))
+    output_channels = 4 if channels == 4 else 3
+    for i, (value,) in enumerate(component.iter_unpack(memoryview(image_data)[:size])):
+        # This ordering handles negative infinity and NaN before converting to int.
+        byte = 0 if not value > 0 else 255 if value >= 1 else round(value * 255)
+        pixels[(i // channels) * output_channels + i % channels] = byte
+    return Image.frombytes("RGBA" if channels == 4 else "RGB", (width, height), bytes(pixels))
 
 
-RG_PADDING_MAP = {
-    "RGE": 16,
-    "RGF": 32,
-    "RG;16": 16,
-    "RG;16s": 16,
-    "RG;8s": 8,
-}
+RG_COMPONENT_FORMATS = {"RG": "B", "RG;16": "H", "RG;16s": "h", "RG;8s": "b"}
 
 
 def rg(image_data: bytes, width: int, height: int, mode: str, codec: str, args) -> Image.Image:
-    # convert rg to rgb by adding in zeroes
-    padding_size = RG_PADDING_MAP[codec]
-    stream = BytesIO(image_data)
-    padding = bytes(padding_size)
-    rgb_data = b"".join(stream.read(padding_size * 2) + padding for _ in range(len(image_data) // (2 * padding_size)))
-    if codec == "RGE":
-        return half(rgb_data, width, height, mode, "RGB", args)
+    # `codec` is the Pillow decoder ("raw"); `args` describes the component layout.
+    if args in ("RGE", "RGF"):
+        return floating_point(image_data, width, height, 2, "e" if args == "RGE" else "f")
+    pixel = struct.Struct("<2" + RG_COMPONENT_FORMATS[args])
+    size = width * height * pixel.size
+    if len(image_data) < size:
+        raise ValueError(f"Invalid RG texture data size: {len(image_data)} < {size}")
+    # Decode just the base mip. Pillow's RGB;16 denotes packed 565, not RGB16 UNorm.
+    source = memoryview(image_data)[:size]
+    pixels = bytearray(width * height * 3)
+    if args == "RG":
+        pixels[0::3] = source[0::2]
+        pixels[1::3] = source[1::2]
     else:
-        return pillow(rgb_data, width, height, mode, codec.replace("RG", "RGB"), args)
+        maximum = (1 << (pixel.size * 4 - (1 if args.endswith("s") else 0))) - 1
+        for i, (red, green) in enumerate(pixel.iter_unpack(source)):
+            pixels[i * 3] = (max(0, red) * 255 + maximum // 2) // maximum
+            pixels[i * 3 + 1] = (max(0, green) * 255 + maximum // 2) // maximum
+    return Image.frombytes(mode, (width, height), bytes(pixels))
 
 
 def rgb9e5float(image_data: bytes, width: int, height: int) -> Image.Image:
@@ -513,12 +524,12 @@ CONV_TABLE: Dict[TF, Tuple[Callable[..., Image.Image], Tuple[Any, ...]]] = {
     TF.DXT5: (pillow, ("RGBA", "bcn", 3)),
     TF.RGBA4444: (pillow, ("RGBA", "raw", "RGBA;4B", (3, 2, 1, 0))),
     TF.BGRA32: (pillow, ("RGBA", "raw", "BGRA")),
-    TF.RHalf: (half, ("R", "raw", "R")),
+    TF.RHalf: (floating_point, (1, "e")),
     TF.RGHalf: (rg, ("RGB", "raw", "RGE")),
-    TF.RGBAHalf: (half, ("RGB", "raw", "RGB")),
-    TF.RFloat: (pillow, ("RGB", "raw", "RF")),
+    TF.RGBAHalf: (floating_point, (4, "e")),
+    TF.RFloat: (floating_point, (1, "f")),
     TF.RGFloat: (rg, ("RGB", "raw", "RGF")),
-    TF.RGBAFloat: (pillow, ("RGBA", "raw", "RGBAF")),
+    TF.RGBAFloat: (floating_point, (4, "f")),
     # TF.YUY2: NotImplementedError("YUY2 not implemented"),
     TF.RGB9e5Float: (rgb9e5float, ()),
     TF.BC4: (pillow, ("L", "bcn", 4)),
